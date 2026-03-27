@@ -1,8 +1,8 @@
-# Homelab Rack Architecture – v2 (32U Design)
+# Homelab Rack Architecture – v3 (32U Design)
 
 ## Overview
 
-This document defines the initial architecture for a scalable homelab system designed to support:
+This document defines the architecture for a scalable homelab system designed to support:
 
 * ML / Quant research pipelines
 * Distributed systems (Docker / Kubernetes)
@@ -38,7 +38,7 @@ The system is structured into **layered infrastructure**, following real-world d
 [ 1U ] Network Switch (TBD)
 [ 1U ] Firewall / Gateway (TBD – WireGuard / OPNsense)
 
-[ 2U ] Mini PC Cluster (control plane)
+[ 2U ] Mini PC Cluster (control plane – MS-01 Node #1 + future nodes)
 
 [ 1U ] NavePoint Rail Kit – Workstation
 [ 4U ] Rosewill RSV-L4000U – Rackmount Workstation (primary interface node)
@@ -91,29 +91,53 @@ The system is structured into **layered infrastructure**, following real-world d
 
 * X520-DA2 has 2× SFP+ ports each — second port on each card available for uplink to future switch
 * DAC cable is a direct passive copper link — no transceiver needed, lowest latency possible
+* MS-01 has native dual 10Gb SFP+ + dual 2.5Gb Ethernet — no additional NIC required
 
 ---
 
-### 2. Control Plane (Mini Cluster)
+### 2. Control Plane
 
-**Components:**
+#### Primary Node – Minisforum MS-01 (Node #1)
 
-* 2–4 Mini PCs (HP EliteDesk / Dell Micro / Lenovo Tiny)
-* Mounted on 2U vented shelf or rack bracket
+The MS-01 serves as the **dedicated primary control node** and backbone of the system. It replaces the abstract "mini cluster" concept with a concrete, production-grade starting point.
 
-**Purpose:**
+**Hardware**
 
-* Always-on infrastructure
-* Docker / Kubernetes orchestration
-* API services
-* Data ingestion pipelines
-* Job scheduling
+| Component | Detail |
+|---|---|
+| Unit | Minisforum MS-01 Mini Workstation |
+| CPU | Intel Core i9-13900H (vPro Enterprise Support) |
+| RAM | 32GB DDR5 (expandable) |
+| Storage | 1TB NVMe SSD (expandable to 3× NVMe + U.2) |
+| Networking | 2× 10Gbps SFP+ / 2× 2.5Gb RJ45 |
+| Connectivity | 2× USB4 / HDMI |
+| Expansion | 1× PCIe 4.0 x16 slot |
+| Form Factor | Mini PC (desk / shelf mountable) |
+| OS | Ubuntu Server |
+
+**Responsibilities:**
+
+* MT5 terminal (via Wine) – Forex.com account
+* Expert Advisors (data output)
+* Python socket server (data ingestion)
+* Initial database host (Postgres / TimescaleDB – Phase 2)
+* Automation services (future: Home Assistant, MQTT)
+* API / reverse proxy layer (future)
+* Docker host (Phase 2)
 
 **Notes:**
 
-* Headless operation
-* Low power consumption
-* Scales horizontally
+* Always-on operation
+* Headless (SSH / remote management)
+* Native 10G SFP+ connects directly to switch or workstation via DAC
+* PCIe 4.0 x16 slot reserved for future expansion
+* Low power consumption relative to CPU performance
+
+#### Future Nodes (Phase 3+)
+
+* Add 2–3 additional Mini PCs (HP EliteDesk / Dell Micro / Lenovo Tiny / additional MS-01)
+* Introduce Proxmox or Kubernetes for orchestration
+* Scale horizontally as workloads grow
 
 ---
 
@@ -158,7 +182,7 @@ The system is structured into **layered infrastructure**, following real-world d
 
 * Connected to monitors/keyboard
 * Not part of control plane
-* GTX 1080 is a placeholder until GPU server (Phase 3) is built
+* GTX 1080 is a placeholder until GPU server (Phase 4) is built
 * Can optionally run VMs, but not required
 
 ---
@@ -196,10 +220,21 @@ The system is structured into **layered infrastructure**, following real-world d
 
 **Purpose:**
 
-* Centralized data storage
-* Market data (tick, OHLC, parquet)
+* Centralized long-term data storage
+* Parquet datasets (market data, tick/OHLC)
 * Model outputs and logs
+* Backups
 * Media storage (Plex)
+* Cold-tier data offload from MS-01 local NVMe
+
+**Storage Tiering Strategy:**
+
+| Tier | Location | Data Type |
+|---|---|---|
+| Hot | MS-01 Local NVMe | OS, active services, DB, staging |
+| Cold | NAS HDD Array | Long-term storage, parquet, backups, media |
+
+**Key Principle:** Hot data stays on local NVMe for lowest latency. Cold data moves to NAS.
 
 **Notes:**
 
@@ -263,33 +298,53 @@ The system is structured into **layered infrastructure**, following real-world d
 
 ## Build Phases
 
-### Phase 1 (Initial Build)
+### Phase 1 – Control Node Deployment *(Current)*
 
+* ✅ MS-01 purchased (i9-13900H, 32GB DDR5, 1TB NVMe)
+* Install Ubuntu Server
+* Deploy MT5 via Wine (Forex.com)
+* Restore Python socket server
+* Validate live data ingestion
+* File-based logging (Excel / CSV – temporary)
+
+**Goal:** Stable, always-on control node with working MT5 + ingestion pipeline
+
+---
+
+### Phase 2 – Service Hardening
+
+* Introduce Postgres / TimescaleDB
+* Replace file-based logging with database storage
+* Add Docker for service management
+* Introduce Home Assistant + MQTT
+* Begin API / reverse proxy layer
 * ✅ Rack selected – 32U 4-Post Open Frame
 * Network Layer (Switch + Firewall)
-* Control Plane (Mini Cluster)
-* Workstation (Rosewill RSV-L4000U)
-* UPS (Tripp Lite SMART1500LCD)
+* Workstation (Rosewill RSV-L4000U) migrated to rack
 
-**Goal:** Functional system with control + interaction
+**Goal:** Production-grade service layer with structured data and containerized workloads
 
 ---
 
-### Phase 2 (Storage Expansion)
+### Phase 3 – Storage Expansion
 
 * Add NAS – Rosewill RSV-H424 (24-bay hot swap)
-* Configure RAID/ZFS
-* Integrate with pipelines
+* Configure ZFS / TrueNAS
+* Integrate cold storage with pipelines
+* Begin offloading parquet / archive data from MS-01
+* Add additional Mini PC nodes to control plane (optional)
+* Introduce Proxmox or Kubernetes (if warranted)
 
-**Goal:** Centralized data layer
+**Goal:** Centralized data layer with hot/cold tiering
 
 ---
 
-### Phase 3 (Compute Expansion)
+### Phase 4 – Compute Expansion
 
 * Add GPU server
 * Connect to control plane
-* Enable distributed workloads
+* Enable distributed ML workloads
+* Backtest acceleration
 
 **Goal:** Full ML compute capability
 
@@ -301,10 +356,17 @@ The system is structured into **layered infrastructure**, following real-world d
 
   * Control ≠ Compute ≠ Storage ≠ Interface
 
+* **Incremental Build**
+
+  * Avoid premature clustering
+  * Avoid early virtualization overhead
+  * Prioritize stability of MT5 + ingestion pipeline
+  * Build from a working system, layer by layer
+
 * **Scalability**
 
   * Add nodes, not rebuild systems
-  * 13U headroom available for future expansion
+  * 10U headroom available for future expansion
 
 * **Modularity**
 
@@ -312,13 +374,18 @@ The system is structured into **layered infrastructure**, following real-world d
 
 * **Always-On Core**
 
-  * Control plane runs continuously
+  * MS-01 control plane runs continuously
   * Workstation is user-driven
+
+* **Hot / Cold Data Strategy**
+
+  * Active data lives on local NVMe (low latency)
+  * Cold data offloads to NAS (cost-effective scale)
 
 * **Future-Proofing**
 
   * Reserved rack space for expansion
-  * 10G networking recommended when scaling
+  * 10G networking ready when scaling
 
 ---
 
@@ -329,11 +396,16 @@ User (Monitor / Keyboard)
         ↓
 Rack Workstation – Rosewill RSV-L4000U (Interface Node)
         ↓
-Mini Cluster (Control Plane)
+MS-01 (Control Plane – Node #1)
+  ├── MT5 / Expert Advisors
+  ├── Python Socket Server
+  ├── Postgres / TimescaleDB (Phase 2)
+  ├── Docker Services (Phase 2)
+  └── Home Assistant / MQTT (Phase 2)
         ↓
-NAS – Rosewill RSV-H424 (Storage Layer)
+NAS – Rosewill RSV-H424 (Cold Storage Layer – Phase 3)
         ↓
-GPU Server (Compute Layer – Phase 3)
+GPU Server (Compute Layer – Phase 4)
 ```
 
 ---
@@ -349,6 +421,7 @@ GPU Server (Compute Layer – Phase 3)
 | Switch | TBD (Managed, 10G recommended) | Pending |
 | Firewall | TBD | Pending |
 | Cabling | Cat 8 Ethernet 75ft – 40Gbps 2000MHz Shielded Direct Burial RJ45 | Ordered |
+| Control Node | Minisforum MS-01 (i9-13900H, 32GB DDR5, 1TB NVMe) | **Purchased** |
 | Workstation (Case) | Rosewill RSV-L4000U (4U, 8-bay, E-ATX) | Ordered |
 | Workstation (CPU) | Intel Core i7-6700K @ 4.00GHz | Owned |
 | Workstation (Mobo) | MSI Z170A PC MATE ATX | Owned |
@@ -371,8 +444,8 @@ GPU Server (Compute Layer – Phase 3)
 | NAS (CPU) | TBD – LGA1151 6th/7th Gen (in organizer, needs ID) | Owned |
 | NAS (Data Drives) | TBD (HDD array) | Pending |
 | UPS | Tripp Lite SMART1500LCD (2U, 1500VA/900W) | Ordered |
-| Mini Cluster | TBD | Pending |
-| GPU Server | TBD | Phase 3 |
+| Future Cluster Nodes | TBD (Phase 3) | Pending |
+| GPU Server | TBD | Phase 4 |
 
 ---
 
@@ -382,16 +455,22 @@ GPU Server (Compute Layer – Phase 3)
 * Route cables along rack rails (vertical management)
 * Open frame rack requires careful cable management planning
 * Avoid overloading a single node with mixed workloads
+* MS-01 native 10G SFP+ eliminates need for separate NIC on control node
 * Plan for future network upgrades (2.5G / 10G)
-* 13U of headroom available – plan VLAN/network topology before filling
+* 10U of headroom available – plan VLAN/network topology before filling
 
 ---
 
 ## Status
 
 * [x] Rack acquired
+* [x] Control node selected and purchased (MS-01 i9-13900H)
+* [ ] Ubuntu Server installed on MS-01
+* [ ] MT5 deployed via Wine
+* [ ] Python socket server restored
+* [ ] Live data ingestion validated
+* [ ] Database transition planning begun
 * [ ] Network layer installed
-* [ ] Mini cluster configured
 * [x] Workstation case acquired (RSV-L4000U)
 * [ ] Workstation migrated to rack case
 * [x] NAS case acquired (RSV-H424)
@@ -400,13 +479,21 @@ GPU Server (Compute Layer – Phase 3)
 
 ---
 
-## Next Steps
+## Immediate Next Steps
+
+1. Install Ubuntu Server on MS-01
+2. Install and configure MT5 via Wine
+3. Restore Python socket server
+4. Validate live data ingestion
+5. Begin database transition planning (Postgres / TimescaleDB)
+
+## Upcoming Next Steps
 
 * Select network hardware (switch + firewall)
-* Select Mini PC hardware for control plane
 * Design cable routing plan for open frame rack
-* Choose software stack (Proxmox / Docker / Kubernetes)
+* Choose container / orchestration stack (Docker → Kubernetes / Proxmox)
 * Configure networking (VLANs, VPN, remote access)
+* Plan NAS drive array and ZFS topology
 
 ---
 
